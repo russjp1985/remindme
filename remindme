@@ -1,0 +1,72 @@
+#!/usr/bin/env php
+<?php
+date_default_timezone_set((!empty($_ENV['REMIND_ME_TZ'])) ? $_ENV['REMIND_ME_TZ']  : 'America/New_York');
+define('REMIND_ME_DIR', (!empty($_ENV['REMIND_ME_DIR']))  ? $_ENV['REMIND_ME_DIR'] : $_ENV['HOME'].'/.remindme');
+define('DATE_STRING', 'D F j, Y g:iA');
+$opts = getopt('w:m:d', array('when', 'message'));
+
+main($opts);
+
+
+
+
+function main($opts) {
+    create_dir();
+
+    // If this is the daemon, run_daemon
+    if (isset($opts['d'])) {
+        exit(run_daemon());
+    }
+
+    if (empty($opts['w']) && empty($opts['m'])) {
+        echo "To create a reminder, you must provide 'w' (when) and 'm' (a message)\n";
+        exit(1);
+    }
+    exit(create_reminder($opts['w'], $opts['m']));
+}
+
+function create_reminder($when, $message) {
+    $when = strtotime($when);
+    $message = trim($message);
+    $pretty_when = date(DATE_STRING, $when);
+    echo "Creating reminder for $message at {$pretty_when}\n";
+    $filename = REMIND_ME_DIR.'/'.$when;
+    file_put_contents($filename, $message);
+}
+
+function run_daemon() {
+    $now = (int) time();
+    echo "Now is: $now\n";
+    $dir = opendir(REMIND_ME_DIR);
+    while ($file = readdir($dir)) {
+        if ($file[0] == '.') {
+            continue;
+        }
+
+        $time = (int) $file;
+        echo " * File: $file\n";
+        if ($time > $now) {
+            echo " * Skipping, $time > $now\n";
+            continue;
+        }
+
+        echo " * $time <= $now, executing!\n";
+        $full_path = REMIND_ME_DIR.'/'.$file;
+        $contents = file_get_contents($full_path);
+        $pretty_when = date(DATE_STRING, $time);
+        `say "$contents"`;
+
+        `growlnotify -m "$contents" -s -a iCal -t "$pretty_when" `;
+        unlink($full_path);
+    }
+}
+
+
+function create_dir() {
+    if (!is_dir(REMIND_ME_DIR)) {
+        mkdir(REMIND_ME_DIR);
+    }
+}
+
+
+
